@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>LostVision AI</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <div class="header">
+            <div>
+                <h1>LostVision AI</h1>
+                <p>AI-Powered Lost & Found Image Matching</p>
+            </div>
+
+            <div class="badge">
+                Computer Vision
+            </div>
+        </div>
+
+
+        <div class="main-card">
+
+            <h2>Find Your Lost Item</h2>
+
+            <p class="subtitle">
+                Upload a lost item image and a found item image.
+                Our AI will compare them and calculate their visual similarity.
+            </p>
+
+
+            <div class="upload-grid">
+
+                <div class="upload-card">
+
+                    <div class="icon">🔍</div>
+
+                    <h3>Lost Item</h3>
+
+                    <p>Upload the image of the lost item</p>
+
+                    <label for="lost_image" class="upload-button">
+                        Choose Image
+                    </label>
+
+                    <input
+                        type="file"
+                        id="lost_image"
+                        accept="image/*"
+                    >
+
+                    <span id="lost-file-name">
+                        No file selected
+                    </span>
+
+                </div>
+
+
+                <div class="upload-card">
+
+                    <div class="icon">📦</div>
+
+                    <h3>Found Item</h3>
+
+                    <p>Upload the image of the found item</p>
+
+                    <label for="found_image" class="upload-button">
+                        Choose Image
+                    </label>
+
+                    <input
+                        type="file"
+                        id="found_image"
+                        accept="image/*"
+                    >
+
+                    <span id="found-file-name">
+                        No file selected
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <button id="compare-button">
+                Compare Images
+            </button>
+
+
+            <div id="result" class="result hidden">
+
+                <h2>AI Match Result</h2>
+
+                <div class="score">
+                    <span id="similarity-score">0%</span>
+                </div>
+
+                <p id="match-status"></p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        const lostInput = document.getElementById("lost_image");
+        const foundInput = document.getElementById("found_image");
+
+        const lostFileName = document.getElementById("lost-file-name");
+        const foundFileName = document.getElementById("found-file-name");
+
+
+        lostInput.addEventListener("change", function () {
+
+            if (this.files.length > 0) {
+                lostFileName.textContent = this.files[0].name;
+            }
+
+        });
+
+
+        foundInput.addEventListener("change", function () {
+
+            if (this.files.length > 0) {
+                foundFileName.textContent = this.files[0].name;
+            }
+
+        });
+
+        const compareButton = document.getElementById("compare-button");
+const resultBox = document.getElementById("result");
+const similarityScore = document.getElementById("similarity-score");
+const matchStatus = document.getElementById("match-status");
+
+
+compareButton.addEventListener("click", async function () {
+
+    // Check if both images are selected
+    if (!lostInput.files.length || !foundInput.files.length) {
+        alert("Please select both images first.");
+        return;
+    }
+
+    // Change button while processing
+    compareButton.textContent = "AI is analyzing...";
+    compareButton.disabled = true;
+
+    // Prepare images for API
+    const formData = new FormData();
+
+    formData.append(
+        "lost_image",
+        lostInput.files[0]
+    );
+
+    formData.append(
+        "found_image",
+        foundInput.files[0]
+    );
+
+    try {
+
+        // Send images to FastAPI
+        const response = await fetch("/compare-images", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        // Show result
+        similarityScore.textContent =
+            data.image_similarity + "%";
+
+        matchStatus.textContent =
+            data.match_status;
+
+        resultBox.classList.remove("hidden");
+
+    } catch (error) {
+
+        alert("Something went wrong while comparing images.");
+        console.error(error);
+
+    }
+
+    // Restore button
+    compareButton.textContent = "Compare Images";
+    compareButton.disabled = false;
+
+});
+
+    </script>
+
+</body>
+</html>

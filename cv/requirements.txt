@@ -1,0 +1,9 @@
+torch
+torchvision
+pillow
+numpy
+scikit-learn
+fastapi
+uvicorn
+python-multipart
+jinja2
