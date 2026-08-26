@@ -1,18 +1,21 @@
-from src.matching.similarity import calculate_text_similarity
-from src.matching.scoring import get_match_status
+from text_similarity import calculate_similarity
 
 
 def match_items(lost_description, found_description):
     """
     Compare a lost item description with a found item description.
+    Returns similarity score and match status.
     """
 
-    score = calculate_text_similarity(
+    score = calculate_similarity(
         lost_description,
         found_description
     )
 
-    status = get_match_status(score)
+    if score >= 0.70:
+        status = "Potential Match"
+    else:
+        status = "Low Match"
 
     return {
         "similarity_score": score,

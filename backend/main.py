@@ -17,14 +17,21 @@ from fastapi.middleware.cors import CORSMiddleware
 # PROJECT PATHS
 # =========================================================
 
+BACKEND_ROOT = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
 PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))
+    BACKEND_ROOT
 )
 
 CV_FOLDER = os.path.join(
     PROJECT_ROOT,
     "cv"
 )
+
+if BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, BACKEND_ROOT)
 
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -45,8 +52,11 @@ from matcher import compare_images
 # =========================================================
 
 from src.nlp.extraction import (
-    extract_keywords,
-    calculate_similarity
+    extract_keywords
+)
+
+from src.matching.matcher import (
+    match_items
 )
 
 
@@ -328,7 +338,7 @@ def get_items():
 
 
 # =========================================================
-# TEXT-BASED MATCHING
+# TEXT-BASED SEMANTIC MATCHING
 # =========================================================
 
 @app.get("/match")
@@ -338,40 +348,28 @@ def match_item(
 
 ):
 
-    new_keywords = extract_keywords(
-        description
-    )
-
+    # Get all stored items
     items = get_all_items()
 
     matches = []
 
 
+    # Compare query description with every stored item
     for item in items:
 
-        existing_keywords_text = (
-            item["keywords"] or ""
-        )
+        result = match_items(
 
-        existing_keywords = [
+            description,
 
-            word.strip()
-
-            for word in existing_keywords_text.split(",")
-
-            if word.strip()
-
-        ]
-
-        similarity = calculate_similarity(
-
-            new_keywords,
-
-            existing_keywords
+            item["description"]
 
         )
 
-        if similarity >= 0.2:
+        similarity = result["similarity_score"]
+
+
+        # Only return reasonably similar items
+        if similarity >= 0.50:
 
             matches.append({
 
@@ -381,11 +379,22 @@ def match_item(
 
                 "description": item["description"],
 
-                "similarity": similarity
+                "similarity": round(
+                    similarity * 100,
+                    2
+                ),
+
+                "similarity_score": round(
+                    similarity,
+                    4
+                ),
+
+                "status": result["status"]
 
             })
 
 
+    # Highest similarity first
     matches.sort(
 
         key=lambda x: x["similarity"],
@@ -585,15 +594,6 @@ async def combined_match(
 
 
     # -----------------------------------------------------
-    # Extract keywords
-    # -----------------------------------------------------
-
-    new_keywords = extract_keywords(
-        description
-    )
-
-
-    # -----------------------------------------------------
     # Save query image temporarily
     # -----------------------------------------------------
 
@@ -667,48 +667,30 @@ async def combined_match(
             continue
 
 
-        text_similarity = 0.0
-
-        image_similarity = 0.0
-
-
         # -------------------------------------------------
-        # TEXT SIMILARITY
+        # TEXT SEMANTIC SIMILARITY
         # -------------------------------------------------
 
-        existing_keywords_text = (
-            item["keywords"] or ""
+        text_result = match_items(
+
+            description,
+
+            item["description"]
+
         )
 
-        existing_keywords = [
+        text_similarity = float(
 
-            word.strip()
+            text_result["similarity_score"]
 
-            for word in existing_keywords_text.split(",")
-
-            if word.strip()
-
-        ]
-
-
-        if new_keywords and existing_keywords:
-
-            text_similarity = float(
-
-                calculate_similarity(
-
-                    new_keywords,
-
-                    existing_keywords
-
-                )
-
-            )
+        )
 
 
         # -------------------------------------------------
         # IMAGE SIMILARITY
         # -------------------------------------------------
+
+        image_similarity = 0.0
 
         stored_image = item.get(
             "image_path"
