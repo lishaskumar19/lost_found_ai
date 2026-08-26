@@ -16,3 +16,4 @@ cv/uploads/
 # OS files
 .DS_Store
 Thumbs.db
+lost_found.db
