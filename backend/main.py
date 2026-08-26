@@ -17,12 +17,12 @@ from fastapi.middleware.cors import CORSMiddleware
 # PROJECT PATHS
 # =========================================================
 
-BACKEND_ROOT = os.path.dirname(
+BACKEND_FOLDER = os.path.dirname(
     os.path.abspath(__file__)
 )
 
 PROJECT_ROOT = os.path.dirname(
-    BACKEND_ROOT
+    BACKEND_FOLDER
 )
 
 CV_FOLDER = os.path.join(
@@ -30,12 +30,15 @@ CV_FOLDER = os.path.join(
     "cv"
 )
 
-if BACKEND_ROOT not in sys.path:
-    sys.path.insert(0, BACKEND_ROOT)
+# Make backend available for imports
+if BACKEND_FOLDER not in sys.path:
+    sys.path.insert(0, BACKEND_FOLDER)
 
+# Make project root available
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# Make CV folder available
 if CV_FOLDER not in sys.path:
     sys.path.insert(0, CV_FOLDER)
 
@@ -52,11 +55,8 @@ from matcher import compare_images
 # =========================================================
 
 from src.nlp.extraction import (
-    extract_keywords
-)
-
-from src.matching.matcher import (
-    match_items
+    extract_keywords,
+    calculate_similarity
 )
 
 
@@ -201,7 +201,7 @@ def process_item(
 
 
 # =========================================================
-# ADD LOST / FOUND ITEM WITH IMAGE
+# ADD LOST / FOUND ITEM
 # =========================================================
 
 @app.post("/items")
@@ -286,7 +286,7 @@ async def add_item(
 
 
     # -----------------------------------------------------
-    # Save item
+    # Save item in database
     # -----------------------------------------------------
 
     item_id = create_item(
@@ -338,7 +338,7 @@ def get_items():
 
 
 # =========================================================
-# TEXT-BASED SEMANTIC MATCHING
+# TEXT-BASED MATCHING
 # =========================================================
 
 @app.get("/match")
@@ -348,56 +348,141 @@ def match_item(
 
 ):
 
-    # Get all stored items
+    new_keywords = extract_keywords(
+        description
+    )
+
     items = get_all_items()
 
     matches = []
 
 
-    # Compare query description with every stored item
     for item in items:
 
-        result = match_items(
+        existing_keywords_text = (
+            item["keywords"] or ""
+        )
 
-            description,
+        existing_keywords = [
 
-            item["description"]
+            word.strip()
+
+            for word in existing_keywords_text.split(",")
+
+            if word.strip()
+
+        ]
+
+
+        if not new_keywords or not existing_keywords:
+
+            continue
+
+
+        try:
+
+            similarity_result = calculate_similarity(
+
+                new_keywords,
+
+                existing_keywords
+
+            )
+
+
+            # Support dictionary result
+            if isinstance(
+                similarity_result,
+                dict
+            ):
+
+                similarity_score = float(
+
+                    similarity_result.get(
+                        "similarity_score",
+                        0.0
+                    )
+
+                )
+
+                status = similarity_result.get(
+                    "status",
+                    "Low Match"
+                )
+
+            # Support numeric result
+            else:
+
+                similarity_score = float(
+                    similarity_result
+                )
+
+                if similarity_score >= 0.80:
+
+                    status = "Strong Match"
+
+                elif similarity_score >= 0.60:
+
+                    status = "Possible Match"
+
+                else:
+
+                    status = "Low Match"
+
+
+        except Exception as error:
+
+            print(
+                "Text similarity error:",
+                error
+            )
+
+            similarity_score = 0.0
+            status = "Low Match"
+
+
+        similarity_percentage = round(
+
+            similarity_score * 100,
+
+            2
 
         )
 
-        similarity = result["similarity_score"]
+
+        # -------------------------------------------------
+        # IGNORE WEAK TEXT MATCHES
+        # -------------------------------------------------
+
+        if similarity_score < 0.60:
+
+            continue
 
 
-        # Only return reasonably similar items
-        if similarity >= 0.50:
+        matches.append({
 
-            matches.append({
+            "item_id": item["id"],
 
-                "item_id": item["id"],
+            "item_type": item["item_type"],
 
-                "item_type": item["item_type"],
+            "description": item["description"],
 
-                "description": item["description"],
+            "similarity": similarity_percentage,
 
-                "similarity": round(
-                    similarity * 100,
-                    2
-                ),
+            "similarity_score": similarity_score,
 
-                "similarity_score": round(
-                    similarity,
-                    4
-                ),
+            "status": status
 
-                "status": result["status"]
-
-            })
+        })
 
 
-    # Highest similarity first
+    # -----------------------------------------------------
+    # Sort highest similarity first
+    # -----------------------------------------------------
+
     matches.sort(
 
-        key=lambda x: x["similarity"],
+        key=lambda x: x["similarity_score"],
 
         reverse=True
 
@@ -532,7 +617,7 @@ async def compare_uploaded_images(
 
 
     # -----------------------------------------------------
-    # Status
+    # Match status
     # -----------------------------------------------------
 
     if similarity_percentage >= 80:
@@ -594,7 +679,16 @@ async def combined_match(
 
 
     # -----------------------------------------------------
-    # Save query image temporarily
+    # Extract keywords
+    # -----------------------------------------------------
+
+    new_keywords = extract_keywords(
+        description
+    )
+
+
+    # -----------------------------------------------------
+    # Save query image
     # -----------------------------------------------------
 
     upload_folder = os.path.join(
@@ -667,30 +761,77 @@ async def combined_match(
             continue
 
 
+        text_similarity = 0.0
+
+        image_similarity = 0.0
+
+
         # -------------------------------------------------
-        # TEXT SEMANTIC SIMILARITY
+        # TEXT SIMILARITY
         # -------------------------------------------------
 
-        text_result = match_items(
-
-            description,
-
-            item["description"]
-
+        existing_keywords_text = (
+            item["keywords"] or ""
         )
 
-        text_similarity = float(
+        existing_keywords = [
 
-            text_result["similarity_score"]
+            word.strip()
 
-        )
+            for word in existing_keywords_text.split(",")
+
+            if word.strip()
+
+        ]
+
+
+        if new_keywords and existing_keywords:
+
+            try:
+
+                text_result = calculate_similarity(
+
+                    new_keywords,
+
+                    existing_keywords
+
+                )
+
+
+                if isinstance(
+                    text_result,
+                    dict
+                ):
+
+                    text_similarity = float(
+
+                        text_result.get(
+                            "similarity_score",
+                            0.0
+                        )
+
+                    )
+
+                else:
+
+                    text_similarity = float(
+                        text_result
+                    )
+
+
+            except Exception as error:
+
+                print(
+                    "Text similarity error:",
+                    error
+                )
+
+                text_similarity = 0.0
 
 
         # -------------------------------------------------
         # IMAGE SIMILARITY
         # -------------------------------------------------
-
-        image_similarity = 0.0
 
         stored_image = item.get(
             "image_path"
@@ -762,47 +903,67 @@ async def combined_match(
             match_status = "Low Match"
 
 
+        # =================================================
+        # IMPORTANT MATCH FILTER
+        # =================================================
+        #
+        # Do NOT show weak matches.
+        #
+        # Example:
+        #
+        # Bottle vs wallet = 28.68%
+        #
+        # That result will NOT be displayed.
+        #
+        # Wallet vs matching wallet = 80%+
+        #
+        # That result WILL be displayed.
+        # =================================================
+
+        if combined_score < 0.60:
+
+            continue
+
+
         # -------------------------------------------------
-        # Add useful matches
+        # Add relevant match
         # -------------------------------------------------
 
-        if combined_score >= 0.20:
+        matches.append({
 
-            matches.append({
+            "item_id": item["id"],
 
-                "item_id": item["id"],
+            "item_type": item["item_type"],
 
-                "item_type": item["item_type"],
+            "description": item["description"],
 
-                "description": item["description"],
+            "text_similarity": round(
 
-                "text_similarity": round(
+                text_similarity * 100,
 
-                    text_similarity * 100,
+                2
 
-                    2
+            ),
 
-                ),
+            "image_similarity": round(
 
-                "image_similarity": round(
+                image_similarity * 100,
 
-                    image_similarity * 100,
+                2
 
-                    2
+            ),
 
-                ),
+            "combined_score": round(
 
-                "combined_score": round(
+                combined_score * 100,
 
-                    combined_score * 100,
+                2
 
-                    2
+            ),
 
-                ),
+            "match_status": match_status
 
-                "match_status": match_status
-
-            })
+        })
 
 
     # -----------------------------------------------------
