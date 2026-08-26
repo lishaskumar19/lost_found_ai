@@ -1,32 +1,46 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 const API_URL = "http://127.0.0.1:8000";
 
 function App() {
+  // =====================================================
+  // STATE
+  // =====================================================
+
   const [itemType, setItemType] = useState("lost");
   const [description, setDescription] = useState("");
   const [itemImage, setItemImage] = useState(null);
 
-  const [result, setResult] = useState(null);
-  const [matches, setMatches] = useState([]);
-  const [items, setItems] = useState([]);
+  const [combinedImage, setCombinedImage] = useState(null);
 
   const [lostImage, setLostImage] = useState(null);
   const [foundImage, setFoundImage] = useState(null);
-  const [imageResult, setImageResult] = useState(null);
 
-  const [combinedImage, setCombinedImage] = useState(null);
+  const [result, setResult] = useState(null);
+  const [message, setMessage] = useState("");
+
+  const [items, setItems] = useState([]);
+  const [matches, setMatches] = useState([]);
   const [combinedMatches, setCombinedMatches] = useState([]);
 
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [imageLoading, setImageLoading] = useState(false);
-  const [combinedLoading, setCombinedLoading] = useState(false);
+  const [imageResult, setImageResult] = useState(null);
 
-  // -------------------------------------------------------
+  const [loading, setLoading] = useState(false);
+  const [combinedLoading, setCombinedLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
+
+  // =====================================================
+  // LOAD ITEMS
+  // =====================================================
+
+  useEffect(() => {
+    getAllItems();
+  }, []);
+
+  // =====================================================
   // SUBMIT ITEM
-  // -------------------------------------------------------
+  // =====================================================
 
   const submitItem = async () => {
     if (!description.trim()) {
@@ -61,17 +75,21 @@ function App() {
 
       setResult(data);
       setMessage("Item submitted successfully!");
+
+      // Refresh database
+      await getAllItems();
+
     } catch (error) {
       console.error(error);
-      setMessage("Could not connect to backend.");
+      setMessage("Could not submit item.");
     }
 
     setLoading(false);
   };
 
-  // -------------------------------------------------------
+  // =====================================================
   // TEXT MATCHING
-  // -------------------------------------------------------
+  // =====================================================
 
   const findMatches = async () => {
     if (!description.trim()) {
@@ -103,6 +121,7 @@ function App() {
       } else {
         setMessage("Possible text matches found!");
       }
+
     } catch (error) {
       console.error(error);
       setMessage("Could not connect to backend.");
@@ -111,14 +130,11 @@ function App() {
     setLoading(false);
   };
 
-  // -------------------------------------------------------
+  // =====================================================
   // VIEW ALL ITEMS
-  // -------------------------------------------------------
+  // =====================================================
 
   const getAllItems = async () => {
-    setLoading(true);
-    setMessage("");
-
     try {
       const response = await fetch(`${API_URL}/items`);
 
@@ -130,22 +146,14 @@ function App() {
 
       setItems(data.items || []);
 
-      if ((data.items || []).length === 0) {
-        setMessage("No items have been reported yet.");
-      } else {
-        setMessage("All reported items loaded.");
-      }
     } catch (error) {
       console.error(error);
-      setMessage("Could not load items.");
     }
-
-    setLoading(false);
   };
 
-  // -------------------------------------------------------
+  // =====================================================
   // DIRECT IMAGE COMPARISON
-  // -------------------------------------------------------
+  // =====================================================
 
   const compareImages = async () => {
     if (!lostImage || !foundImage) {
@@ -179,6 +187,7 @@ function App() {
       if (data.success) {
         setMessage("Images compared successfully!");
       }
+
     } catch (error) {
       console.error(error);
       setMessage("Could not compare images.");
@@ -187,9 +196,9 @@ function App() {
     setImageLoading(false);
   };
 
-  // -------------------------------------------------------
-  // COMBINED MATCHING
-  // -------------------------------------------------------
+  // =====================================================
+  // COMBINED AI MATCHING
+  // =====================================================
 
   const findCombinedMatches = async () => {
     if (!description.trim()) {
@@ -224,6 +233,8 @@ function App() {
 
       const data = await response.json();
 
+      console.log("AI MATCH RESPONSE:", data);
+
       setCombinedMatches(data.matches || []);
 
       if ((data.matches || []).length === 0) {
@@ -231,6 +242,7 @@ function App() {
       } else {
         setMessage("AI combined matching completed!");
       }
+
     } catch (error) {
       console.error(error);
       setMessage("Could not perform combined matching.");
@@ -239,51 +251,98 @@ function App() {
     setCombinedLoading(false);
   };
 
-  // -------------------------------------------------------
+  // =====================================================
   // SCORE HELPERS
-  // -------------------------------------------------------
+  // =====================================================
+
+  const normalizeScore = (score) => {
+    const value = Number(score);
+
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(value, 100));
+  };
+
+  const formatScore = (score) => {
+    const value = normalizeScore(score);
+
+    if (Number.isInteger(value)) {
+      return `${value}%`;
+    }
+
+    return `${value.toFixed(2)}%`;
+  };
 
   const getStatusClass = (status = "") => {
-    const value = status.toLowerCase();
+    const value = String(status).toLowerCase();
 
-    if (value.includes("strong")) return "strong";
-    if (value.includes("possible")) return "possible";
+    if (value.includes("strong")) {
+      return "strong";
+    }
+
+    if (
+      value.includes("possible") ||
+      value.includes("potential")
+    ) {
+      return "possible";
+    }
+
     return "low";
   };
 
   const getScoreClass = (score) => {
-    if (score >= 70) return "score-high";
-    if (score >= 45) return "score-medium";
+    const value = normalizeScore(score);
+
+    if (value >= 70) {
+      return "score-high";
+    }
+
+    if (value >= 45) {
+      return "score-medium";
+    }
+
     return "score-low";
   };
+
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <div className="app">
 
-      {/* =====================================================
+      {/* =================================================
           HEADER
-      ===================================================== */}
+      ================================================= */}
 
       <header className="topbar">
+
         <div className="brand">
-          <div className="brand-icon">🔎</div>
+
+          <div className="brand-icon">
+            🔎
+          </div>
 
           <div>
-            <h1>Lost & Found AI</h1>
+            <h1>Lost &amp; Found AI</h1>
             <span>Intelligent Item Recovery System</span>
           </div>
+
         </div>
 
         <div className="ai-status">
           <span className="status-dot"></span>
           AI System Online
         </div>
+
       </header>
 
 
-      {/* =====================================================
+      {/* =================================================
           HERO
-      ===================================================== */}
+      ================================================= */}
 
       <section className="hero-section">
 
@@ -314,11 +373,14 @@ function App() {
         <div className="hero-visual">
 
           <div className="floating-card card-one">
+
             <span>👜</span>
+
             <div>
-              <strong>Lost Bag</strong>
+              <strong>Lost Item</strong>
               <small>Searching...</small>
             </div>
+
           </div>
 
           <div className="hero-search">
@@ -326,11 +388,14 @@ function App() {
           </div>
 
           <div className="floating-card card-two">
+
             <span>📱</span>
+
             <div>
               <strong>Found Item</strong>
               <small>Potential match</small>
             </div>
+
           </div>
 
         </div>
@@ -338,23 +403,33 @@ function App() {
       </section>
 
 
-      {/* =====================================================
+      {/* =================================================
           MESSAGE
-      ===================================================== */}
+      ================================================= */}
 
       {message && (
+
         <div className="message">
+
           <span>✓</span>
+
           {message}
+
         </div>
+
       )}
 
 
-      {/* =====================================================
-          REPORT ITEM
-      ===================================================== */}
+      {/* =================================================
+          MAIN GRID
+      ================================================= */}
 
       <section className="main-grid">
+
+
+        {/* =================================================
+            REPORT ITEM
+        ================================================= */}
 
         <div className="card report-card">
 
@@ -379,14 +454,24 @@ function App() {
             <div className="type-selector">
 
               <button
-                className={itemType === "lost" ? "type-active" : ""}
+                type="button"
+                className={
+                  itemType === "lost"
+                    ? "type-active"
+                    : ""
+                }
                 onClick={() => setItemType("lost")}
               >
                 🔴 Lost Item
               </button>
 
               <button
-                className={itemType === "found" ? "type-active found" : ""}
+                type="button"
+                className={
+                  itemType === "found"
+                    ? "type-active found"
+                    : ""
+                }
                 onClick={() => setItemType("found")}
               >
                 🟢 Found Item
@@ -403,8 +488,10 @@ function App() {
 
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Example: I lost my black Samsung phone in college..."
+              onChange={(e) =>
+                setDescription(e.target.value)
+              }
+              placeholder="Example: I lost my red water bottle with black cap..."
             />
 
             <small className="field-hint">
@@ -424,7 +511,9 @@ function App() {
                 type="file"
                 accept="image/*"
                 onChange={(e) =>
-                  setItemImage(e.target.files[0] || null)
+                  setItemImage(
+                    e.target.files[0] || null
+                  )
                 }
               />
 
@@ -450,14 +539,19 @@ function App() {
           <div className="button-row">
 
             <button
+              type="button"
               className="primary-button"
               onClick={submitItem}
               disabled={loading}
             >
-              {loading ? "Processing..." : "Submit Item →"}
+              {loading
+                ? "Processing..."
+                : "Submit Item →"}
             </button>
 
+
             <button
+              type="button"
               className="secondary-button"
               onClick={findMatches}
               disabled={loading}
@@ -465,7 +559,9 @@ function App() {
               🔍 Text Matches
             </button>
 
+
             <button
+              type="button"
               className="secondary-button"
               onClick={getAllItems}
               disabled={loading}
@@ -478,9 +574,9 @@ function App() {
         </div>
 
 
-        {/* =====================================================
-            AI MATCHING
-        ===================================================== */}
+        {/* =================================================
+            AI COMBINED MATCHING
+        ================================================= */}
 
         <div className="card ai-card">
 
@@ -501,21 +597,38 @@ function App() {
           <div className="ai-explanation">
 
             <div className="ai-feature">
+
               <span>📝</span>
+
               <div>
                 <strong>NLP Analysis</strong>
                 <small>Understands descriptions</small>
               </div>
+
             </div>
 
-            <div className="plus">+</div>
 
             <div className="ai-feature">
+
               <span>🖼️</span>
+
               <div>
                 <strong>Computer Vision</strong>
                 <small>Compares visual features</small>
               </div>
+
+            </div>
+
+
+            <div className="ai-feature">
+
+              <span>🤖</span>
+
+              <div>
+                <strong>AI Matching</strong>
+                <small>Combines both scores</small>
+              </div>
+
             </div>
 
           </div>
@@ -527,10 +640,13 @@ function App() {
               type="file"
               accept="image/*"
               onChange={(e) => {
+
                 setCombinedImage(
                   e.target.files[0] || null
                 );
+
                 setCombinedMatches([]);
+
               }}
             />
 
@@ -552,6 +668,7 @@ function App() {
 
 
           <button
+            type="button"
             className="ai-button"
             onClick={findCombinedMatches}
             disabled={
@@ -570,9 +687,9 @@ function App() {
       </section>
 
 
-      {/* =====================================================
+      {/* =================================================
           DIRECT IMAGE COMPARISON
-      ===================================================== */}
+      ================================================= */}
 
       <section className="card comparison-card">
 
@@ -584,7 +701,9 @@ function App() {
 
           <div>
             <h3>Direct Image Comparison</h3>
-            <p>Compare a lost image with a found image.</p>
+            <p>
+              Compare a lost image with a found image.
+            </p>
           </div>
 
         </div>
@@ -592,18 +711,26 @@ function App() {
 
         <div className="image-comparison-grid">
 
+
           <label className="image-drop">
 
             <input
               type="file"
               accept="image/*"
               onChange={(e) => {
-                setLostImage(e.target.files[0] || null);
+
+                setLostImage(
+                  e.target.files[0] || null
+                );
+
                 setImageResult(null);
+
               }}
             />
 
-            <span className="drop-number">01</span>
+            <span className="drop-number">
+              01
+            </span>
 
             <div className="drop-icon">
               🔴
@@ -633,12 +760,19 @@ function App() {
               type="file"
               accept="image/*"
               onChange={(e) => {
-                setFoundImage(e.target.files[0] || null);
+
+                setFoundImage(
+                  e.target.files[0] || null
+                );
+
                 setImageResult(null);
+
               }}
             />
 
-            <span className="drop-number">02</span>
+            <span className="drop-number">
+              02
+            </span>
 
             <div className="drop-icon">
               🟢
@@ -660,6 +794,7 @@ function App() {
 
 
         <button
+          type="button"
           className="compare-button"
           onClick={compareImages}
           disabled={
@@ -676,138 +811,156 @@ function App() {
       </section>
 
 
-      {/* =====================================================
+      {/* =================================================
           IMAGE RESULT
-      ===================================================== */}
+      ================================================= */}
 
-      {imageResult && imageResult.success && (
+      {imageResult &&
+        imageResult.success && (
 
-        <section className="result-card">
+          <section className="result-card">
 
-          <div className="result-header">
+            <div className="result-header">
 
-            <div>
-              <span className="result-label">
-                COMPUTER VISION RESULT
-              </span>
+              <div>
 
-              <h3>Image Matching Analysis</h3>
-            </div>
+                <span className="result-label">
+                  COMPUTER VISION RESULT
+                </span>
 
-            <span
-              className={`status-badge ${getStatusClass(
-                imageResult.match_status
-              )}`}
-            >
-              {imageResult.match_status}
-            </span>
+                <h3>
+                  Image Matching Analysis
+                </h3>
 
-          </div>
-
-
-          <div className="score-section">
-
-            <div
-              className={`score-circle ${getScoreClass(
-                imageResult.image_similarity
-              )}`}
-            >
-              <strong>
-                {imageResult.image_similarity}%
-              </strong>
-
-              <span>
-                Similarity
-              </span>
-            </div>
-
-            <div className="score-info">
-
-              <h4>
-                Visual Feature Similarity
-              </h4>
-
-              <p>
-                ResNet18 compares visual features extracted
-                from both images.
-              </p>
-
-              <div className="progress">
-                <div
-                  style={{
-                    width: `${Math.min(
-                      imageResult.image_similarity,
-                      100
-                    )}%`,
-                  }}
-                />
               </div>
 
-              <small>
-                This score represents visual similarity,
-                not the probability that the objects are identical.
-              </small>
+              <span
+                className={`status-badge ${getStatusClass(
+                  imageResult.match_status
+                )}`}
+              >
+                {imageResult.match_status ||
+                  "Image Comparison"}
+              </span>
 
             </div>
 
-          </div>
 
-        </section>
+            <div className="score-section">
 
-      )}
+              <div
+                className={`score-circle ${getScoreClass(
+                  imageResult.image_similarity
+                )}`}
+              >
+
+                <strong>
+                  {formatScore(
+                    imageResult.image_similarity
+                  )}
+                </strong>
+
+                <span>
+                  Similarity
+                </span>
+
+              </div>
 
 
-      {/* =====================================================
+              <div className="score-info">
+
+                <h4>
+                  Visual Feature Similarity
+                </h4>
+
+                <p>
+                  Computer vision compares visual
+                  features extracted from both images.
+                </p>
+
+
+                <div className="progress">
+
+                  <div
+                    style={{
+                      width: `${normalizeScore(
+                        imageResult.image_similarity
+                      )}%`,
+                    }}
+                  />
+
+                </div>
+
+
+                <small>
+                  This score represents visual similarity,
+                  not the probability that the objects are identical.
+                </small>
+
+              </div>
+
+            </div>
+
+          </section>
+
+        )}
+
+
+      {/* =================================================
           SUBMITTED RESULT
-      ===================================================== */}
+      ================================================= */}
 
-      {result && result.success && (
+      {result &&
+        result.success && (
 
-        <section className="result-card success-card">
+          <section className="result-card success-card">
 
-          <div className="success-icon">
-            ✓
-          </div>
+            <div className="success-icon">
+              ✓
+            </div>
 
-          <div>
+            <div>
 
-            <span className="result-label">
-              SUCCESS
-            </span>
-
-            <h3>Item Submitted Successfully</h3>
-
-            <div className="result-details">
-
-              <span>
-                <strong>ID</strong>
-                #{result.item_id}
+              <span className="result-label">
+                SUCCESS
               </span>
 
-              <span>
-                <strong>TYPE</strong>
-                {result.item_type}
-              </span>
+              <h3>
+                Item Submitted Successfully
+              </h3>
 
-              <span>
-                <strong>IMAGE</strong>
-                {result.image_path
-                  ? "Saved"
-                  : "Not uploaded"}
-              </span>
+
+              <div className="result-details">
+
+                <span>
+                  <strong>ID</strong>
+                  #{result.item_id}
+                </span>
+
+                <span>
+                  <strong>TYPE</strong>
+                  {result.item_type}
+                </span>
+
+                <span>
+                  <strong>IMAGE</strong>
+                  {result.image_path
+                    ? "Saved"
+                    : "Not uploaded"}
+                </span>
+
+              </div>
 
             </div>
 
-          </div>
+          </section>
 
-        </section>
-
-      )}
+        )}
 
 
-      {/* =====================================================
-          AI MATCHES
-      ===================================================== */}
+      {/* =================================================
+          AI MATCH RESULTS
+      ================================================= */}
 
       {combinedMatches.length > 0 && (
 
@@ -816,12 +969,17 @@ function App() {
           <div className="results-title">
 
             <div>
+
               <span className="result-label">
                 AI ANALYSIS
               </span>
 
-              <h3>🤖 Potential Matches</h3>
+              <h3>
+                🤖 Potential Matches
+              </h3>
+
             </div>
+
 
             <span className="count-badge">
               {combinedMatches.length} found
@@ -832,82 +990,161 @@ function App() {
 
           <div className="match-grid">
 
-            {combinedMatches.map((match) => (
+            {combinedMatches.map((match) => {
 
-              <div
-                className="match-card"
-                key={match.item_id}
-              >
+              const textScore =
+                normalizeScore(
+                  match.text_similarity
+                );
 
-                <div className="match-top">
+              const imageScore =
+                normalizeScore(
+                  match.image_similarity
+                );
 
-                  <span className="item-id">
-                    ITEM #{match.item_id}
+              const combinedScore =
+                normalizeScore(
+                  match.combined_score
+                );
+
+
+              return (
+
+                <div
+                  className="match-card"
+                  key={match.item_id}
+                >
+
+                  <div className="match-top">
+
+                    <span className="item-id">
+                      ITEM #{match.item_id}
+                    </span>
+
+
+                    <span
+                      className={`status-badge ${getStatusClass(
+                        match.match_status
+                      )}`}
+                    >
+                      {match.match_status ||
+                        "Match"}
+                    </span>
+
+                  </div>
+
+
+                  <h4>
+                    {match.description}
+                  </h4>
+
+
+                  <span className="item-type">
+
+                    {match.item_type === "lost"
+                      ? "🔴 Lost"
+                      : "🟢 Found"}
+
                   </span>
 
-                  <span
-                    className={`status-badge ${getStatusClass(
-                      match.match_status
-                    )}`}
-                  >
-                    {match.match_status}
-                  </span>
+
+                  {/* =====================================
+                      SCORE METRICS
+                  ===================================== */}
+
+                  <div className="metrics">
+
+                    <div>
+
+                      <span>
+                        Text
+                      </span>
+
+                      <strong>
+                        {formatScore(textScore)}
+                      </strong>
+
+                    </div>
+
+
+                    <div>
+
+                      <span>
+                        Image
+                      </span>
+
+                      <strong>
+                        {formatScore(imageScore)}
+                      </strong>
+
+                    </div>
+
+
+                    <div className="combined-score">
+
+                      <span>
+                        Combined
+                      </span>
+
+                      <strong>
+                        {formatScore(combinedScore)}
+                      </strong>
+
+                    </div>
+
+                  </div>
+
+
+                  {/* =====================================
+                      PROGRESS BAR
+                  ===================================== */}
+
+                  <div className="mini-progress">
+
+                    <div
+                      style={{
+                        width:
+                          `${combinedScore}%`,
+                      }}
+                    />
+
+                  </div>
+
+
+                  {/* =====================================
+                      SCORE DETAILS
+                  ===================================== */}
+
+                  <div className="score-summary">
+
+                    <div>
+                      Text similarity:
+                      <strong>
+                        {formatScore(textScore)}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Image similarity:
+                      <strong>
+                        {formatScore(imageScore)}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Overall match:
+                      <strong>
+                        {formatScore(combinedScore)}
+                      </strong>
+                    </div>
+
+                  </div>
 
                 </div>
 
-                <h4>
-                  {match.description}
-                </h4>
+              );
 
-                <span className="item-type">
-                  {match.item_type === "lost"
-                    ? "🔴 Lost"
-                    : "🟢 Found"}
-                </span>
-
-
-                <div className="metrics">
-
-                  <div>
-                    <span>Text</span>
-                    <strong>
-                      {match.text_similarity}%
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>Image</span>
-                    <strong>
-                      {match.image_similarity}%
-                    </strong>
-                  </div>
-
-                  <div className="combined-score">
-                    <span>Combined</span>
-                    <strong>
-                      {match.combined_score}%
-                    </strong>
-                  </div>
-
-                </div>
-
-
-                <div className="mini-progress">
-
-                  <div
-                    style={{
-                      width: `${Math.min(
-                        match.combined_score,
-                        100
-                      )}%`,
-                    }}
-                  />
-
-                </div>
-
-              </div>
-
-            ))}
+            })}
 
           </div>
 
@@ -916,9 +1153,9 @@ function App() {
       )}
 
 
-      {/* =====================================================
+      {/* =================================================
           TEXT MATCHES
-      ===================================================== */}
+      ================================================= */}
 
       {matches.length > 0 && (
 
@@ -927,11 +1164,15 @@ function App() {
           <div className="results-title">
 
             <div>
+
               <span className="result-label">
                 NLP ANALYSIS
               </span>
 
-              <h3>🔍 Text Matches</h3>
+              <h3>
+                🔍 Text Matches
+              </h3>
+
             </div>
 
           </div>
@@ -939,40 +1180,52 @@ function App() {
 
           <div className="match-grid">
 
-            {matches.map((match) => (
+            {matches.map((match) => {
 
-              <div
-                className="match-card"
-                key={match.item_id}
-              >
+              const score =
+                normalizeScore(
+                  Number(match.similarity) * 100
+                );
 
-                <div className="match-top">
 
-                  <span className="item-id">
-                    ITEM #{match.item_id}
-                  </span>
+              return (
 
-                  <span className="text-score">
-                    {Math.round(
-                      match.similarity * 100
-                    )}%
+                <div
+                  className="match-card"
+                  key={match.item_id}
+                >
+
+                  <div className="match-top">
+
+                    <span className="item-id">
+                      ITEM #{match.item_id}
+                    </span>
+
+                    <span className="text-score">
+                      {formatScore(score)}
+                    </span>
+
+                  </div>
+
+
+                  <h4>
+                    {match.description}
+                  </h4>
+
+
+                  <span className="item-type">
+
+                    {match.item_type === "lost"
+                      ? "🔴 Lost"
+                      : "🟢 Found"}
+
                   </span>
 
                 </div>
 
-                <h4>
-                  {match.description}
-                </h4>
+              );
 
-                <span className="item-type">
-                  {match.item_type === "lost"
-                    ? "🔴 Lost"
-                    : "🟢 Found"}
-                </span>
-
-              </div>
-
-            ))}
+            })}
 
           </div>
 
@@ -981,9 +1234,9 @@ function App() {
       )}
 
 
-      {/* =====================================================
+      {/* =================================================
           ALL ITEMS
-      ===================================================== */}
+      ================================================= */}
 
       {items.length > 0 && (
 
@@ -992,12 +1245,17 @@ function App() {
           <div className="results-title">
 
             <div>
+
               <span className="result-label">
                 DATABASE
               </span>
 
-              <h3>📋 Reported Items</h3>
+              <h3>
+                📋 Reported Items
+              </h3>
+
             </div>
+
 
             <span className="count-badge">
               {items.length} items
@@ -1021,6 +1279,7 @@ function App() {
                     ITEM #{item.id}
                   </span>
 
+
                   <span
                     className={
                       item.item_type === "lost"
@@ -1033,13 +1292,18 @@ function App() {
 
                 </div>
 
+
                 <h4>
                   {item.description}
                 </h4>
 
+
                 <p className="keywords">
-                  {item.keywords}
+                  {Array.isArray(item.keywords)
+                    ? item.keywords.join(", ")
+                    : item.keywords}
                 </p>
+
 
                 <div className="database-footer">
 
@@ -1066,16 +1330,24 @@ function App() {
       )}
 
 
-      {/* =====================================================
+      {/* =================================================
           FOOTER
-      ===================================================== */}
+      ================================================= */}
 
       <footer>
 
         <div>
-          <strong>🔎 Lost & Found AI</strong>
-          <span>AI-powered item recovery</span>
+
+          <strong>
+            🔎 Lost &amp; Found AI
+          </strong>
+
+          <span>
+            AI-powered item recovery
+          </span>
+
         </div>
+
 
         <span>
           Computer Vision • NLP • LLM • FastAPI
